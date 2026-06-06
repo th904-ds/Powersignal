@@ -29,6 +29,7 @@ class Dataset:
     enabled: bool = True
     paginate: bool = True
     date_param: str | None = None
+    end_date_param: str | None = None   # daily 모드에서 endDt처럼 끝날짜를 별도 파라미터로 받는 API용
     date_format: str = "%Y%m%d"
     area_param: str | None = None
     areas: list = field(default_factory=list)

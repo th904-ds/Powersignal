@@ -141,6 +141,29 @@ datasets:
     paginate: true
     enabled: true
 
+  # === 기상 보조 =====================================================
+
+  - key: asos_hourly
+    name: "종관기상관측 시간자료 (ASOS)"
+    purpose: "날씨보조"
+    path: "https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList"
+    ref: "https://www.data.go.kr/data/15057210/openapi.do"
+    mode: daily
+    date_param: startDt
+    end_date_param: endDt
+    date_format: "%Y%m%d"
+    area_param: stnIds
+    areas: [108, 133, 143, 159]   # 서울·대전·대구·부산 (전력 수요 주요 권역)
+    extra_params:
+      dataType: json
+      dataCd: ASOS
+      dateCd: HR
+      startHh: "01"
+      endHh: "23"
+      numOfRows: 999   # ASOS API 한 번 요청 최대 1,000건 제한
+    paginate: true
+    enabled: true
+
   # [구버전·비활성] 직접 KPX 호스트 쓰는 옛 SMP API. 보통 smp_dayahead 로 충분.
   - key: smp_legacy
     name: "계통한계가격조회(구버전)"

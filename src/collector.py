@@ -117,7 +117,7 @@ class Collector:
         while True:
             if not self._budget_left():
                 raise BudgetExceeded
-            q = {**ds.extra_params, **base_params, size_name: n, page_name: page}
+            q = {size_name: n, **base_params, **ds.extra_params, page_name: page}
             rows, total = self.client.get(path, q, parser=parser)
             rows_all.extend(rows)
             done = (
@@ -139,6 +139,8 @@ class Collector:
         base = {}
         if ds.date_param and target is not None:
             base[ds.date_param] = target.strftime(ds.date_format)
+            if ds.end_date_param:
+                base[ds.end_date_param] = target.strftime(ds.date_format)
 
         if ds.area_param and ds.areas:
             rows: list[dict] = []
