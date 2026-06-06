@@ -1,0 +1,162 @@
+# =====================================================================
+# 데이터셋 선언 파일
+# ---------------------------------------------------------------------
+# 새 데이터셋을 추가/수정할 때는 코드가 아니라 이 파일만 고친다.
+#
+# ★ 표시 = "마이페이지 > 활용신청 상세 > 상세설명" 의 요청변수에서 직접
+#    확인해 채워야 하는 값(주로 날짜 파라미터 이름). 채운 뒤 enabled: true.
+#
+# path 규칙
+#   - apis.data.go.kr/B552115 계열: "서비스명/get서비스명" 만 적는다.
+#       예) FuelCost1  ->  path: "FuelCost1/getFuelCost1"
+#   - 호스트가 다른 API(openapi.kpx.or.kr 등): path 에 전체 URL을 적으면
+#     base_url 무시하고 그대로 호출한다.
+# =====================================================================
+
+defaults:
+  # KPX OpenAPI 는 data.go.kr 프록시(apis.data.go.kr/B552115)로 호출한다.
+  base_url: "https://apis.data.go.kr/B552115"
+  num_of_rows: 9999          # 한 번에 받을 행 수(=odcloud perPage). 페이지 호출 수를 줄임
+  daily_call_budget: 90      # 개발계정 하루 100건 한도의 안전 마진
+  request_interval_sec: 0.5  # 호출 간 최소 간격
+
+# ---------------------------------------------------------------------
+# mode : snapshot(과거조회 불가, 현재 1장) | daily(날짜 백필) | monthly(월 백필)
+# api_type : kpx(표준 XML/JSON) | odcloud(api.odcloud.kr, data[]+totalCount)
+# area_param : 육지/제주처럼 지역을 따로 호출해야 하면 지정(각 1콜)
+# ---------------------------------------------------------------------
+
+datasets:
+
+  # === SMP 예측 ======================================================
+
+  # [권장/확정] 업로드한 상세보기로 요청주소 확인됨.
+  - key: smp_dayahead
+    name: "계통한계가격 및 수요예측(하루전 발전계획용)"
+    purpose: "SMP예측"
+    ref: "https://www.data.go.kr/data/15131225/openapi.do"
+    path: "SmpWithForecastDemand/getSmpWithForecastDemand"
+    mode: snapshot            # 요청변수에 거래일(tradeDay 등)이 있으면 daily 로 변경 + date_param 지정
+    extra_params: {dataType: json}   # 필수
+    paginate: true
+    enabled: true
+
+  # 오늘전력수급현황 (5분단위, openapi.kpx.or.kr 직접 호출, 전체 URL)
+  - key: power_supply_today
+    name: "오늘전력수급현황조회"
+    purpose: "SMP예측"
+    path: "https://openapi.kpx.or.kr/openapi/sukub5mToday/getSukub5mToday"
+    mode: snapshot
+    paginate: false           # 하루치(288행)를 한 번에 반환
+    enabled: true
+
+  # 발전원별 발전량 현황 (5분단위, openapi.kpx.or.kr 직접 호출, 전체 URL)
+  - key: gen_by_source
+    name: "발전원별 발전량 현황조회"
+    purpose: "SMP예측"
+    path: "https://openapi.kpx.or.kr/openapi/sumperfuel5m/getSumperfuel5m"
+    mode: snapshot
+    paginate: false
+    enabled: true
+
+  # 지역별 시간별 태양광/풍력 발전량 (odcloud — 연도별 파일이 별개 uddi)
+  - key: solar_wind_by_region
+    name: "지역별 시간별 태양광 및 풍력 발전량"
+    purpose: "SMP예측"
+    api_type: odcloud
+    ref: "https://infuser.odcloud.kr/oas/docs?namespace=15065269/v1"
+    paginate: true
+    enabled: true
+    resources:   # {기간라벨: 전체URL} — Swagger 의 모든 파일. 필요한 연도만 남겨도 됨.
+      "2017": "https://api.odcloud.kr/api/15065269/v1/uddi:2d675f57-b442-497b-a973-e35746c338b7"
+      "2020": "https://api.odcloud.kr/api/15065269/v1/uddi:60601120-1391-40c1-a326-e9f3286333b5"
+      "2021": "https://api.odcloud.kr/api/15065269/v1/uddi:ce8e9486-0b70-46af-8319-9108bef9d8b1"
+      "2023_0228": "https://api.odcloud.kr/api/15065269/v1/uddi:166a7ee3-161a-4dc2-9f59-cedb6b1c7213"
+      "2023_0531": "https://api.odcloud.kr/api/15065269/v1/uddi:b98e93d3-ce0d-47df-a23b-a46844552ac4"
+      "2023_0610": "https://api.odcloud.kr/api/15065269/v1/uddi:0da6dc76-cff3-4759-b86f-b0ff631e5b32"
+      "2023_0831": "https://api.odcloud.kr/api/15065269/v1/uddi:68afdd00-4055-4049-b0da-89ba5157a43c"
+      "2023_1130": "https://api.odcloud.kr/api/15065269/v1/uddi:4dec37b2-15e1-480b-94e3-87bdc2ecff1b"
+      "2024": "https://api.odcloud.kr/api/15065269/v1/uddi:57e66d86-ea1d-4efb-9eb3-a6d575336841"
+      "2025": "https://api.odcloud.kr/api/15065269/v1/uddi:76850689-e74c-402e-bfec-9142976b96c8"
+
+  - key: monthly_fuel_cost
+    name: "월간 연료비용 정보"
+    purpose: "SMP예측"
+    path: "FuelCost1/getFuelCost1"
+    mode: monthly
+    date_param: "day"            # 확정: 연료비용 일자(YYYYMM)
+    date_format: "%Y%m"
+    extra_params: {dataType: json}   # 필수. fuelType(원자력/유연탄/무연탄/LNG/유류)은 옵션이라 생략=전체
+    paginate: true
+    enabled: true
+
+  - key: smp_decision_count
+    name: "연료원별 SMP 결정 횟수(일별)"
+    purpose: "SMP예측"
+    path: "SmpDecByFuel2/getSmpDecByFuel2"
+    mode: daily
+    date_param: "tradeDay"       # 확정: 거래일자(YYYYMMDD)
+    date_format: "%Y%m%d"
+    extra_params: {dataType: json}   # 필수
+    paginate: true
+    enabled: true
+
+  # === DR 낙찰 예측 ===================================================
+  # 경제성/신뢰성 DR 은 D-2월 정산 → 최신 2개월 자동 skip(settle_lag_months).
+
+  - key: dr_economic
+    name: "경제성DR 거래실적"
+    purpose: "DR낙찰예측"
+    path: "EconomicDrTradeInfo1/getEconomicDrTradeInfo1"
+    mode: monthly
+    date_param: "★월파라미터명_채우기"
+    date_format: "%Y%m"
+    settle_lag_months: 2
+    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    paginate: true
+    enabled: false
+
+  - key: dr_reliability
+    name: "신뢰성DR 거래실적"
+    purpose: "DR낙찰예측"
+    path: "ReliabilityDrTradeInfo/getReliabilityDrTradeInfo"
+    mode: monthly
+    date_param: "★월파라미터명_채우기"
+    date_format: "%Y%m"
+    settle_lag_months: 2
+    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    paginate: true
+    enabled: false
+
+  - key: dr_voluntary
+    name: "자발적DR 입낙찰 현황"
+    purpose: "DR낙찰예측"
+    path: "BidTradeSraSsr/getBidTradeSraSsr"
+    mode: daily
+    date_param: "★날짜파라미터명_채우기"
+    date_format: "%Y%m%d"
+    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    paginate: true
+    enabled: false
+
+  - key: dr_plus
+    name: "플러스DR 입낙찰 및 이행량"
+    purpose: "DR낙찰예측"
+    path: "PlusSliaSliRdu2/getPlusSliaSliRdu2"
+    mode: daily
+    date_param: "★날짜파라미터명_채우기"
+    date_format: "%Y%m%d"
+    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    paginate: true
+    enabled: false
+
+  # [구버전·비활성] 직접 KPX 호스트 쓰는 옛 SMP API. 보통 smp_dayahead 로 충분.
+  - key: smp_legacy
+    name: "계통한계가격조회(구버전)"
+    purpose: "SMP예측"
+    path: "https://openapi.kpx.or.kr/openapi/smp1hToday/getSmp1hToday"
+    mode: snapshot
+    area_param: "areaCd"
+    areas: [1, 2]
+    paginate: false
+    enabled: false

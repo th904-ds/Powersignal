@@ -1,0 +1,7 @@
+requests>=2.31
+python-dotenv>=1.0
+PyYAML>=6.0
+pandas>=2.0
+pyarrow>=14.0
+# GCS 업로드를 쓸 때만 필요 (로컬만 쓰면 설치 안 해도 됨)
+google-cloud-storage>=2.14
