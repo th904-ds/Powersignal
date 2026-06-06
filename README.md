@@ -72,13 +72,35 @@ python run.py daily            # 최근 7일 윈도우, 이미 받은 건 skip
 크론/작업스케줄러에 걸어두면 자동 누적. (지금은 로컬 기준. 나중에 그대로 컨테이너에 넣어
 Cloud Run으로 승격 가능 — 코드 변경 없음.)
 
-## 7. GCS 업로드
-`.env`에 `GCS_BUCKET` 설정 후:
+## 7. GCS 업로드 (클라우드 적재)
+`backfill`/`daily` 가 끝나면 **이번 실행에서 새로 저장된 parquet 만 자동으로 GCS 에 올린다.**
+업로드는 crc32c 비교로 **변경된 파일만** 올리므로 매번 전체를 다시 올리지 않는다.
+업로드가 실패해도 로컬 데이터는 안전하게 남고, 수집 결과는 그대로 출력된다.
+
+### 최초 1회 세팅
 ```bash
-pip install google-cloud-storage
-gcloud auth application-default login   # 또는 서비스계정 키 경로 지정
-python run.py upload
+pip install google-cloud-storage           # requirements.txt 에 포함됨
+gcloud auth login                          # CLI 인증 (버킷 생성 등)
+gcloud auth application-default login      # 코드(ADC)용 인증 — 이게 있어야 업로드됨
+gcloud storage buckets create gs://<버킷명> --location=asia-northeast3 --uniform-bucket-level-access
 ```
+`.env` 에 세 줄 채우기:
+```
+GCS_BUCKET=<버킷명>        # 예: powersignal-energy-data
+GCS_PROJECT=<프로젝트ID>   # 예: contest-motie  (ADC 인증만으론 프로젝트가 안 잡혀 필요)
+GOOGLE_APPLICATION_CREDENTIALS=   # 서비스계정 키 파일을 쓸 때만. gcloud 로그인 했으면 비워둠
+```
+
+### 사용
+```bash
+python run.py backfill --start 2024-01-01 --end 2024-12-31   # 수집 후 자동 업로드
+python run.py daily                                          # 증분 수집 후 자동 업로드
+python run.py backfill ... --no-upload                       # 자동 업로드 끄기(로컬만)
+python run.py upload                                         # 로컬 전체를 수동으로 미러링(변경분만)
+```
+> `GCS_BUCKET` 이 비어 있으면 자동 업로드는 건너뛰고 경고만 남긴다(로컬 저장은 정상).
+> 윈도우에서 새 터미널인데 `gcloud` 가 안 잡히면:
+> `$env:Path += ";$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin"`
 
 ---
 

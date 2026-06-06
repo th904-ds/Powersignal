@@ -52,17 +52,66 @@ def save(key: str, unit: str, rows: list[dict], meta: dict | None = None) -> Pat
 
 
 # ------------------------------------------------------------------- GCS
-def upload_dir_to_gcs(bucket_name: str, prefix: str = "energy-collector") -> int:
-    """processed 전체를 GCS 로 미러링 업로드. 업로드한 파일 수 반환."""
+def _gcs_bucket(bucket_name: str):
+    import os
+
     from google.cloud import storage  # 필요할 때만 import
 
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    count = 0
-    for path in PROCESSED_DIR.rglob("*.parquet"):
-        rel = path.relative_to(PROCESSED_DIR)
-        blob = bucket.blob(f"{prefix}/{rel.as_posix()}")
-        blob.upload_from_filename(str(path))
-        count += 1
-    log.info("GCS 업로드 완료: %d개 파일 -> gs://%s/%s", count, bucket_name, prefix)
-    return count
+    # ADC(gcloud) 인증만으로는 프로젝트가 안 잡힐 수 있어 명시적으로 넘긴다.
+    project = os.getenv("GCS_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if project:
+        # google.auth 의 "No project ID could be determined" 경고도 함께 잠재운다.
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", project)
+    return storage.Client(project=project).bucket(bucket_name)
+
+
+def _local_crc32c(path: Path) -> str:
+    """GCS 의 blob.crc32c 와 동일 포맷(base64)으로 로컬 파일 체크섬 계산."""
+    import base64
+
+    import google_crc32c
+
+    h = google_crc32c.Checksum()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return base64.b64encode(h.digest()).decode()
+
+
+def _upload_one(bucket, path: Path, prefix: str, skip_unchanged: bool) -> bool:
+    """파일 1개 업로드. 실제로 올렸으면 True, 변경없어 건너뛰면 False."""
+    rel = path.relative_to(PROCESSED_DIR)
+    blob_name = f"{prefix}/{rel.as_posix()}"
+    if skip_unchanged:
+        existing = bucket.get_blob(blob_name)  # 없으면 None, 있으면 crc32c 포함 메타 로드
+        if existing is not None and existing.crc32c == _local_crc32c(path):
+            return False
+    bucket.blob(blob_name).upload_from_filename(str(path))
+    return True
+
+
+def upload_files(bucket_name: str, paths, prefix: str = "energy-collector",
+                 skip_unchanged: bool = True) -> int:
+    """지정한 parquet 파일들만 GCS 로 업로드(수집 직후 자동 업로드용). 올린 파일 수 반환."""
+    bucket = _gcs_bucket(bucket_name)
+    uploaded = 0
+    for p in paths:
+        if _upload_one(bucket, Path(p), prefix, skip_unchanged):
+            uploaded += 1
+    log.info("GCS 자동 업로드: 신규/변경 %d개 -> gs://%s/%s", uploaded, bucket_name, prefix)
+    return uploaded
+
+
+def upload_dir_to_gcs(bucket_name: str, prefix: str = "energy-collector",
+                      skip_unchanged: bool = True) -> int:
+    """processed 전체를 GCS 로 미러링 업로드. 변경된 파일만 올린다. 올린 파일 수 반환."""
+    bucket = _gcs_bucket(bucket_name)
+    uploaded = skipped = 0
+    for path in sorted(PROCESSED_DIR.rglob("*.parquet")):
+        if _upload_one(bucket, path, prefix, skip_unchanged):
+            uploaded += 1
+        else:
+            skipped += 1
+    log.info("GCS 업로드 완료: 신규/변경 %d개, 동일 %d개 -> gs://%s/%s",
+             uploaded, skipped, bucket_name, prefix)
+    return uploaded
