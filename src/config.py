@@ -33,6 +33,7 @@ class Dataset:
     area_param: str | None = None
     areas: list = field(default_factory=list)
     settle_lag_months: int = 0
+    date_sanity_col: str | None = None   # 지정 시 이 컬럼의 연도가 비정상(현재+1년 초과/2000 미만)인 행 제거
     resources: dict = field(default_factory=dict)   # odcloud 전용: {라벨: 전체URL}
     extra_params: dict = field(default_factory=dict)  # 매 요청에 붙는 고정값(예: dataType)
     ref: str | None = None

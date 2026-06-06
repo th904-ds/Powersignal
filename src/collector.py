@@ -51,6 +51,24 @@ def _shift_months(d: date, n: int) -> date:
     return date(idx // 12, idx % 12 + 1, 1)
 
 
+def _drop_implausible_dates(rows: list[dict], col: str) -> list[dict]:
+    """date_sanity_col 의 연도가 비정상(2000 미만 또는 현재+1년 초과)인 행 제거.
+
+    원본에 섞인 센티넬/플레이스홀더(예: 신뢰성DR 의 tradeDay 99990813, 30000330)를 거른다.
+    정상적인 근미래(예: 자발적DR 의 다음날 입찰)는 현재+1년 이내라 보존된다.
+    """
+    max_year = date.today().year + 1
+    kept = []
+    for r in rows:
+        v = str(r.get(col, "")).strip()
+        if len(v) >= 4 and v[:4].isdigit() and 2000 <= int(v[:4]) <= max_year:
+            kept.append(r)
+    dropped = len(rows) - len(kept)
+    if dropped:
+        log.info("비정상 날짜(%s) %d행 제거", col, dropped)
+    return kept
+
+
 class Collector:
     def __init__(self, settings: Settings):
         self.s = settings
@@ -151,6 +169,8 @@ class Collector:
                             self.s.daily_call_budget, ds.key)
                 break
             rows = self._fetch_unit(ds, target)
+            if ds.date_sanity_col:
+                rows = _drop_implausible_dates(rows, ds.date_sanity_col)
             storage.save(ds.key, unit, rows,
                          meta={"purpose": ds.purpose, "dataset": ds.key})
             fetched += 1

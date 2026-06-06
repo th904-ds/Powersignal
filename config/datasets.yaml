@@ -108,47 +108,38 @@ datasets:
     name: "경제성DR 거래실적"
     purpose: "DR낙찰예측"
     path: "EconomicDrTradeInfo1/getEconomicDrTradeInfo1"
-    mode: monthly
-    date_param: "★월파라미터명_채우기"
-    date_format: "%Y%m"
-    settle_lag_months: 2
-    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    mode: snapshot            # 테스트확정: tradeDay 생략 시 전체이력 반환(totalCount 3198) → 1콜로 전량수집
+    extra_params: {dataType: json}   # 필수
     paginate: true
-    enabled: false
+    enabled: true
 
   - key: dr_reliability
     name: "신뢰성DR 거래실적"
     purpose: "DR낙찰예측"
     path: "ReliabilityDrTradeInfo/getReliabilityDrTradeInfo"
-    mode: monthly
-    date_param: "★월파라미터명_채우기"
-    date_format: "%Y%m"
-    settle_lag_months: 2
-    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    mode: snapshot            # 테스트확정: tradeDay 생략 시 전체이력 반환(totalCount 838) → 1콜로 전량수집
+    date_sanity_col: "tradeDay"  # 원본에 9999xxxx·3000xxxx 센티넬 행 섞여있어 제거
+    extra_params: {dataType: json}   # 필수
     paginate: true
-    enabled: false
+    enabled: true
 
   - key: dr_voluntary
     name: "자발적DR 입낙찰 현황"
     purpose: "DR낙찰예측"
     path: "BidTradeSraSsr/getBidTradeSraSsr"
-    mode: daily
-    date_param: "★날짜파라미터명_채우기"
-    date_format: "%Y%m%d"
-    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    mode: snapshot            # 테스트확정: tradeDay 생략 시 전체이력 반환(totalCount 23097) → ~3콜로 전량수집
+    extra_params: {dataType: json}   # 필수
     paginate: true
-    enabled: false
+    enabled: true
 
   - key: dr_plus
     name: "플러스DR 입낙찰 및 이행량"
     purpose: "DR낙찰예측"
     path: "PlusSliaSliRdu2/getPlusSliaSliRdu2"
-    mode: daily
-    date_param: "★날짜파라미터명_채우기"
-    date_format: "%Y%m%d"
-    extra_params: {dataType: json}   # 필수. date_param 채우면 동작
+    mode: snapshot            # 테스트확정: tradeDay 생략 시 전체이력 반환(totalCount 6048) → 1콜로 전량수집
+    extra_params: {dataType: json}   # 필수
     paginate: true
-    enabled: false
+    enabled: true
 
   # [구버전·비활성] 직접 KPX 호스트 쓰는 옛 SMP API. 보통 smp_dayahead 로 충분.
   - key: smp_legacy
