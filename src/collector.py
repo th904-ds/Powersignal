@@ -160,6 +160,7 @@ class Collector:
             return {"key": ds.key, "status": "unconfigured"}
 
         fetched = skipped = total_rows = 0
+        saved_paths: list = []
         for unit, target in self._units(ds, start, end):
             if storage.is_collected(ds.key, unit):
                 skipped += 1
@@ -171,12 +172,13 @@ class Collector:
             rows = self._fetch_unit(ds, target)
             if ds.date_sanity_col:
                 rows = _drop_implausible_dates(rows, ds.date_sanity_col)
-            storage.save(ds.key, unit, rows,
-                         meta={"purpose": ds.purpose, "dataset": ds.key})
+            path = storage.save(ds.key, unit, rows,
+                                meta={"purpose": ds.purpose, "dataset": ds.key})
+            saved_paths.append(path)
             fetched += 1
             total_rows += len(rows)
         return {"key": ds.key, "status": "ok", "fetched": fetched,
-                "skipped": skipped, "rows": total_rows}
+                "skipped": skipped, "rows": total_rows, "saved_paths": saved_paths}
 
     def run(self, keys: list[str], start: date, end: date) -> list[dict]:
         import requests
