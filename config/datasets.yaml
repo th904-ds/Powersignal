@@ -83,10 +83,8 @@ datasets:
     name: "월간 연료비용 정보"
     purpose: "SMP예측"
     path: "FuelCost1/getFuelCost1"
-    mode: monthly
-    date_param: "day"            # 확정: 연료비용 일자(YYYYMM)
-    date_format: "%Y%m"
-    extra_params: {dataType: json}   # 필수. fuelType(원자력/유연탄/무연탄/LNG/유류)은 옵션이라 생략=전체
+    mode: snapshot               # 테스트확정: day 생략 시 전체이력 반환(totalCount 280) → 1콜로 전량수집
+    extra_params: {dataType: json}
     paginate: true
     enabled: true
 
@@ -94,10 +92,8 @@ datasets:
     name: "연료원별 SMP 결정 횟수(일별)"
     purpose: "SMP예측"
     path: "SmpDecByFuel2/getSmpDecByFuel2"
-    mode: daily
-    date_param: "tradeDay"       # 확정: 거래일자(YYYYMMDD)
-    date_format: "%Y%m%d"
-    extra_params: {dataType: json}   # 필수
+    mode: snapshot               # 테스트확정: tradeDay 생략 시 전체이력 반환(totalCount 28449) → ~3콜로 전량수집
+    extra_params: {dataType: json}
     paginate: true
     enabled: true
 

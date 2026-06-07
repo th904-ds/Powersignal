@@ -90,10 +90,10 @@ def _auto_upload(settings, results, no_upload: bool):
         return
     try:
         n = storage.upload_files(settings.gcs_bucket, paths)
-        print(f"\n☁  GCS 자동 업로드: {n}개 파일 -> gs://{settings.gcs_bucket}/energy-collector")
+        print(f"\nGCS 자동 업로드: {n}개 파일 -> gs://{settings.gcs_bucket}/energy-collector")
     except Exception as e:  # 업로드 실패가 수집 결과를 날리지 않도록
         logging.getLogger("collector").error("자동 업로드 실패(로컬 데이터는 안전): %s", e)
-        print(f"\n⚠  GCS 자동 업로드 실패(로컬 데이터는 안전): {e}\n"
+        print(f"\nGCS 자동 업로드 실패(로컬 데이터는 안전): {e}\n"
               f"   인증/버킷 확인 후 'python run.py upload' 로 재시도하세요.")
 
 
