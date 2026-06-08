@@ -17,7 +17,7 @@ defaults:
   # KPX OpenAPI 는 data.go.kr 프록시(apis.data.go.kr/B552115)로 호출한다.
   base_url: "https://apis.data.go.kr/B552115"
   num_of_rows: 9999          # 한 번에 받을 행 수(=odcloud perPage). 페이지 호출 수를 줄임
-  daily_call_budget: 90      # 개발계정 하루 100건 한도의 안전 마진
+  daily_call_budget: 90      # KPX B552115 API 100콜/일 한도 기준 (ASOS/odcloud 단독 실행 시 500까지 가능)
   request_interval_sec: 0.5  # 호출 간 최소 간격
 
 # ---------------------------------------------------------------------

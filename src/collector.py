@@ -158,7 +158,7 @@ class Collector:
             log.info("건너뜀(비활성) %s", ds.key)
             return {"key": ds.key, "status": "disabled"}
         if not ds.is_configured:
-            log.warning("건너뜀(미설정 ★) %s — datasets.yaml 에서 path/date_param 채우세요", ds.key)
+            log.warning("건너뜀(미설정 ★) %s - datasets.yaml 에서 path/date_param 채우세요", ds.key)
             return {"key": ds.key, "status": "unconfigured"}
 
         fetched = skipped = total_rows = 0
@@ -168,7 +168,7 @@ class Collector:
                 skipped += 1
                 continue
             if not self._budget_left():
-                log.warning("호출 예산(%d) 소진 — %s 는 다음 실행에서 이어받기",
+                log.warning("호출 예산(%d) 소진 - %s 는 다음 실행에서 이어받기",
                             self.s.daily_call_budget, ds.key)
                 break
             rows = self._fetch_unit(ds, target)
