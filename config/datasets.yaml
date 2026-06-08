@@ -59,6 +59,17 @@ datasets:
     paginate: false
     enabled: true
 
+  # 발전원별 발전량 누적이력 (2022-01-01~, 시간단위×발전원8종, 날짜필터 없음 → 스냅샷 28콜)
+  - key: gen_by_source_hist
+    name: "발전원별 발전량 이력조회 (PvAmountByPwrGen)"
+    purpose: "SMP예측"
+    ref: "https://www.data.go.kr/data/15131225/openapi.do"
+    path: "PvAmountByPwrGen/getPvAmountByPwrGen"
+    mode: snapshot
+    extra_params: {dataType: json}
+    paginate: true
+    enabled: true
+
   # 지역별 시간별 태양광/풍력 발전량 (odcloud — 연도별 파일이 별개 uddi)
   - key: solar_wind_by_region
     name: "지역별 시간별 태양광 및 풍력 발전량"
