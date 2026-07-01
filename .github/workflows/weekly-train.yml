@@ -45,5 +45,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: training-executed-notebook
-          path: 02.model/Model_Train_Final.executed.ipynb
+          path: 03.Modeling/Model_Train_Final.executed.ipynb
           if-no-files-found: ignore
