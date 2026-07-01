@@ -235,17 +235,18 @@ CREATE TABLE IF NOT EXISTS model_features (
 -- ─────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS predictions (
-    datetime            TIMESTAMPTZ NOT NULL,
-    area_name           VARCHAR(10) NOT NULL DEFAULT '육지',
-    model_id            VARCHAR(10) NOT NULL,
-    smp_pred_base       DOUBLE PRECISION,        -- 모델1 1차 예측값
-    smp_pred_residual   DOUBLE PRECISION,        -- 모델2 잔차 보정값
-    smp_pred_final      DOUBLE PRECISION,        -- base + residual (화면 표시용)
-    smp_score           DOUBLE PRECISION,        -- 0~100 정규화
-    reserve_power_pred  DOUBLE PRECISION,        -- 예비력 예측 (신뢰성 DR 판정용, 검토중)
-    dr_score            DOUBLE PRECISION,        -- 경제성 DR 낙찰 가능성 0~100
-    model_version       VARCHAR(20),
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    datetime                            TIMESTAMPTZ NOT NULL,
+    area_name                           VARCHAR(10) NOT NULL DEFAULT '육지',
+    model_id                            TEXT NOT NULL,
+    smp_pred_base                       DOUBLE PRECISION,        -- 모델1 1차 예측값
+    smp_pred_residual                   DOUBLE PRECISION,        -- 모델2 잔차 보정값
+    smp_pred_final                      DOUBLE PRECISION,        -- base + residual (화면 표시용)
+    smp_score                           DOUBLE PRECISION,        -- 0~100 정규화
+    reserve_power_pred                  DOUBLE PRECISION,        -- 예비력 예측 (신뢰성 DR 판정용)
+    dr_score                            DOUBLE PRECISION,        -- 경제성 DR 낙찰 가능성 0~100
+    score_weighted_revenue_per_1000kw   DOUBLE PRECISION,        -- 1,000kW당 기대수익 (pssr_p75 * SMP * dr_score/100)
+    model_version                       VARCHAR(20),
+    created_at                          TIMESTAMPTZ DEFAULT NOW(),
     PRIMARY KEY (datetime, area_name, model_id)
 );
 
@@ -265,6 +266,63 @@ CREATE TABLE IF NOT EXISTS model_registry (
     note            TEXT,
     PRIMARY KEY (model_id, version)
 );
+
+-- 모델 산출물 바이너리 저장 (모델 pkl 등, 모델링 팀이 씀)
+CREATE TABLE IF NOT EXISTS model_artifacts (
+    model_id            TEXT      NOT NULL,
+    version              TEXT      NOT NULL,
+    artifact_type        TEXT      NOT NULL,      -- 예: 'model', 'scaler'
+    artifact_format       TEXT      NOT NULL,      -- 예: 'joblib', 'json'
+    artifact_bytes       BYTEA     NOT NULL,
+    is_active            BOOLEAN   DEFAULT TRUE,
+    created_at           TIMESTAMPTZ DEFAULT NOW(),
+    note                 TEXT,
+    PRIMARY KEY (model_id, version, artifact_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_artifacts_active ON model_artifacts (model_id, artifact_type, is_active);
+
+-- 모델 단위 SHAP 설명값 (model1/model2/pssr_p75/reserve_power, 학습·평가 시점 기준)
+CREATE TABLE IF NOT EXISTS model_explain_values (
+    id                BIGSERIAL PRIMARY KEY,
+    model_id          TEXT NOT NULL,
+    version           TEXT NOT NULL,
+    component         TEXT NOT NULL,   -- 예: 'model1', 'model2', 'pssr_p75', 'reserve_power'
+    explain_type      TEXT NOT NULL,   -- 예: 'shap'
+    target_date       DATE,
+    target_datetime   TIMESTAMPTZ,
+    split_name        TEXT,            -- 예: 'train', 'valid', 'test'
+    feature_name      TEXT NOT NULL,
+    feature_value     DOUBLE PRECISION,
+    effect_value      DOUBLE PRECISION,
+    abs_effect_value  DOUBLE PRECISION,
+    effect_rank       INTEGER,
+    base_value        DOUBLE PRECISION,
+    created_at        TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_model_explain_lookup ON model_explain_values (model_id, version, component, target_date, target_datetime);
+
+-- 예측 단위 SHAP 설명값 (화면의 "스코어 근거 패널" = LLM + SHAP 조합에 사용)
+CREATE TABLE IF NOT EXISTS prediction_explain_values (
+    id                    BIGSERIAL PRIMARY KEY,
+    prediction_datetime   TIMESTAMPTZ NOT NULL,
+    area_name             TEXT NOT NULL,
+    prediction_model_id   TEXT NOT NULL,   -- predictions.model_id
+    model_id              TEXT NOT NULL,   -- 설명 대상 컴포넌트 모델 (model1/model2/pssr_p75/reserve_power 등)
+    model_version         TEXT,
+    component             TEXT NOT NULL,
+    explain_type          TEXT NOT NULL,   -- 예: 'shap'
+    feature_name          TEXT NOT NULL,
+    feature_value         DOUBLE PRECISION,
+    effect_value          DOUBLE PRECISION,
+    abs_effect_value      DOUBLE PRECISION,
+    effect_rank           INTEGER,
+    base_value            DOUBLE PRECISION,
+    created_at            TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_prediction_explain_lookup ON prediction_explain_values (prediction_datetime, area_name, prediction_model_id, model_id, component);
 
 -- ─────────────────────────────────────────────────────────────
 -- 4. 정적·참조 테이블 (프론트에서 직접 읽는 RAW/정적 데이터)
@@ -332,6 +390,35 @@ CREATE TABLE IF NOT EXISTS industry_weights (
     industry_name   VARCHAR(40) NOT NULL,     -- 예: '반도체/전자'
     weight          DOUBLE PRECISION NOT NULL, -- 집중도 가중치
     description     TEXT
+);
+
+-- 유저 계정 + 기업 설정값 (프론트 마이페이지가 씀, AI 리포트 생성이 읽음)
+CREATE TABLE IF NOT EXISTS users (
+    user_id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email                   VARCHAR(255) NOT NULL UNIQUE,
+    company_name            VARCHAR(100),
+    contact_name            VARCHAR(50),
+    contact_phone           VARCHAR(20),
+    industry                VARCHAR(20) REFERENCES industry_weights (industry_code),
+    region                  VARCHAR(20),
+    contract_power          INTEGER,               -- kW
+    dr_registered           BOOLEAN NOT NULL DEFAULT FALSE,
+    aggregator              VARCHAR(50),            -- 수요관리사업자명, 미등록 시 NULL
+    production_per_hour     INTEGER NOT NULL DEFAULT 0,  -- 만원, 미입력 시 0
+    expected_reduction_kw   INTEGER NOT NULL DEFAULT 0,  -- kW, 미입력 시 0
+    created_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AI 리포트 생성 결과 캐시 (같은 유저·같은 날짜 재요청 시 LLM 재호출 방지)
+CREATE TABLE IF NOT EXISTS reports (
+    user_id         UUID NOT NULL REFERENCES users (user_id),
+    report_date     DATE NOT NULL,          -- Case A: 오늘 날짜 / Case B: 선택한 미래 날짜
+    case_type       VARCHAR(10) NOT NULL,   -- 'today' | 'future'
+    report_text     TEXT NOT NULL,
+    disclaimer      TEXT,                   -- Case B(미래)만 값 존재, Case A는 NULL
+    model_version   VARCHAR(30),
+    generated_at    TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (user_id, report_date, case_type)
 );
 
 -- ─────────────────────────────────────────────────────────────

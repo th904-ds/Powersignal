@@ -14,7 +14,7 @@
 |---|---|---|
 | 1 | DB 선택 | PostgreSQL 선정 (구조화 데이터 + 팀 호환성) |
 | 2 | 로컬 환경 구성 | Docker로 PostgreSQL 17 컨테이너 설치 |
-| 3 | 스키마 설계 | 원본·피처·정적·예측 테이블 설계 (총 15개) |
+| 3 | 스키마 설계 | 원본·피처·정적·예측 테이블 설계 (현재 총 26개) |
 | 4 | Python 연동 모듈 작성 | `02.database/db.py` — upsert, rename, query |
 | 5 | 기존 데이터 초기 적재 | `load_initial.py` — parquet → DB (420,000+행) |
 | 6 | 수집 파이프라인 자동 연동 | `storage.py` 수정 — 수집 즉시 DB upsert |
@@ -61,7 +61,7 @@ pip install sqlalchemy psycopg2-binary python-dotenv pandas
 
 ---
 
-## 2. 테이블 구조 (총 15개)
+## 2. 테이블 구조 (총 26개)
 
 ### 파이프라인 자동 적재 테이블
 
@@ -94,8 +94,11 @@ pip install sqlalchemy psycopg2-binary python-dotenv pandas
 
 | 테이블 | 용도 | PK | 상태 |
 |---|---|---|---|
-| `predictions` | 모델 예측 결과 | (datetime, area_name, model_id) | 0행 — 모델링 팀이 채움 |
-| `model_registry` | 모델 버전·성능 기록 | (model_id, version) | 0행 — 재학습 시 기록 |
+| `predictions` | 모델 예측 결과 | (datetime, area_name, model_id) | 모델링 팀이 채움 (score_weighted_revenue_per_1000kw 컬럼 포함) |
+| `model_registry` | 모델 버전·성능 기록 | (model_id, version) | 재학습 시 기록 |
+| `model_artifacts` | 모델 산출물 바이너리 저장 | (model_id, version, artifact_type) | 모델링 팀이 채움 (신규) |
+| `model_explain_values` | 모델 단위 SHAP 값 | id | 모델링 팀이 채움 (신규) |
+| `prediction_explain_values` | 예측 단위 SHAP 값 | id | 모델링 팀이 채움 (신규) |
 
 ---
 
@@ -141,9 +144,18 @@ pip install sqlalchemy psycopg2-binary python-dotenv pandas
 | `smp_pred_residual` | 모델2 잔차 보정값 | |
 | `smp_pred_final` | base + residual (화면 표시용 최종값) | **프론트가 이 값 사용** |
 | `smp_score` | smp_pred_final 기준 0~100 정규화 | |
-| `reserve_power_pred` | 예비력 예측 (MW) | 신뢰성 DR 판정용, 검토중 |
+| `reserve_power_pred` | 예비력 예측 (MW) | 신뢰성 DR 판정용, 구현 완료 |
 | `dr_score` | 경제성 DR 낙찰 가능성 0~100 | |
+| `score_weighted_revenue_per_1000kw` | 1,000kW당 기대수익 | pssr_p75 × SMP × dr_score/100 |
 | `predicted_smp` | (구버전 호환용) | 신규는 smp_pred_final 사용 |
+
+### 4-1. SHAP 설명값 테이블 (신규, 모델링 팀이 씀)
+
+| 테이블 | 용도 | PK |
+|---|---|---|
+| `model_artifacts` | 모델 산출물(pkl 등) 바이너리 저장 | (model_id, version, artifact_type) |
+| `model_explain_values` | 모델 단위 SHAP 값 (학습/평가 시점) | id |
+| `prediction_explain_values` | 예측 단위 SHAP 값 (스코어 근거 패널용) | id |
 
 ---
 

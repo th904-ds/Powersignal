@@ -40,7 +40,7 @@ pip install sqlalchemy psycopg2-binary python-dotenv pandas
 
 ## 1. 테이블 전체 목록
 
-**총 23개 테이블.** 작성 주체별로 구분.
+**총 26개 테이블.** 작성 주체별로 구분.
 
 ### 파이프라인 자동 적재 (수집·전처리)
 
@@ -77,8 +77,11 @@ pip install sqlalchemy psycopg2-binary python-dotenv pandas
 
 | 테이블 | 용도 | 상태 |
 |---|---|---|
-| `predictions` | 모델 예측 결과 | 0행 (모델링 팀이 채움) |
-| `model_registry` | 모델 버전·성능 기록 | 0행 (모델링 팀이 채움) |
+| `predictions` | 모델 예측 결과 | 모델링 팀이 채움 |
+| `model_registry` | 모델 버전·성능 기록 | 모델링 팀이 채움 |
+| `model_artifacts` | 모델 산출물 바이너리 저장 (신규) | 모델링 팀이 채움 |
+| `model_explain_values` | 모델 단위 SHAP 값 (신규) | 모델링 팀이 채움 |
+| `prediction_explain_values` | 예측 단위 SHAP 값 (신규) | 모델링 팀이 채움 |
 
 ### 한국에너지공단 정적 통계 (지역별, 5개)
 
@@ -271,8 +274,9 @@ df_trend = pd.read_sql(
 | `smp_pred_residual` | 모델2 잔차 보정값 |
 | `smp_pred_final` | base + residual (화면 표시용 최종값) |
 | `smp_score` | 0~100 정규화 스코어 |
-| `reserve_power_pred` | 예비력 예측 (신뢰성 DR 판정용, 검토중) |
+| `reserve_power_pred` | 예비력 예측 (신뢰성 DR 판정용) — 구현 완료 |
 | `dr_score` | 경제성 DR 낙찰 가능성 0~100 |
+| `score_weighted_revenue_per_1000kw` | 1,000kW당 기대수익 (pssr_p75 × SMP × dr_score/100) |
 | `predicted_smp` | (구버전 호환용, 신규는 smp_pred_final 사용) |
 
 ```python
@@ -286,10 +290,22 @@ pred_df = pd.DataFrame({
     "smp_pred_final": [...],
     "smp_score": [...],
     "dr_score": [...],
+    "reserve_power_pred": [...],
+    "score_weighted_revenue_per_1000kw": [...],
     "model_version": "v1.0",
 })
 pred_df.to_sql("predictions", engine, if_exists="append", index=False, method="multi")
 ```
+
+### 4-1. SHAP 설명값 테이블 (모델링 팀이 씀, 신규)
+
+`predictions` 저장과 별도로, SHAP 기여도를 아래 3개 테이블에 저장합니다.
+
+| 테이블 | 용도 | PK |
+|---|---|---|
+| `model_artifacts` | 모델 산출물(pkl 등) 바이너리 저장 | (model_id, version, artifact_type) |
+| `model_explain_values` | 모델 단위 SHAP 값 (학습/평가 시점) | id (BIGSERIAL) |
+| `prediction_explain_values` | 예측 단위 SHAP 값 (화면의 "스코어 근거 패널"에 사용) | id (BIGSERIAL) |
 
 ---
 

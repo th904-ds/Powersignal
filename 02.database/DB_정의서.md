@@ -22,17 +22,20 @@ Supabase PostgreSQL  |  기준일: 2026-06-28
   12. model_features                           52,608행       2023-01-01  ~  2025-12-31
   13. model_registry                           5행          
   14. predictions                              168행          2026-01-01  ~  2026-01-07
+  15. model_artifacts                          (모델 산출물 바이너리 저장)
+  16. model_explain_values                     (모델 단위 SHAP 설명값)
+  17. prediction_explain_values                (예측 단위 SHAP 설명값, 스코어 근거 패널용)
 
   [정적 참조 데이터]
-  15. industry_weights                         6행          
-  16. industry_energy_by_source                13행         
-  17. industry_energy_trend                    13행         
-  18. industry_energy_by_firm_size             13행         
-  19. region_energy_by_source                  18행         
-  20. region_energy_trend                      18행         
-  21. region_energy_by_firm_size               18행         
-  22. industrial_complex_energy                18행         
-  23. national_complex_energy                  18행         
+  18. industry_weights                         6행          
+  19. industry_energy_by_source                13행         
+  20. industry_energy_trend                    13행         
+  21. industry_energy_by_firm_size             13행         
+  22. region_energy_by_source                  18행         
+  23. region_energy_trend                      18행         
+  24. region_energy_by_firm_size               18행         
+  25. industrial_complex_energy                18행         
+  26. national_complex_energy                  18행         
 
 ────────────────────────────────────────────────────────────
 2. 테이블별 컬럼 상세
@@ -340,6 +343,63 @@ Supabase PostgreSQL  |  기준일: 2026-06-28
     smp_score           FLOAT                   SMP 정규화 점수 (0~100)
     reserve_power_pred  FLOAT                   예비력 예측 (MW)
     dr_score            FLOAT                   경제성DR 낙찰 가능성 (0~100)
+    score_weighted_revenue_per_1000kw  FLOAT    1,000kW당 기대수익 (pssr_p75 × SMP × dr_score/100)
+
+  ────────────────────────────────────────
+  model_artifacts
+  모델 산출물 바이너리 저장 (모델링 팀이 씀)
+  PK  : model_id, version, artifact_type
+
+    model_id         TEXT          NOT NULL  모델 ID
+    version          TEXT          NOT NULL  버전
+    artifact_type    TEXT          NOT NULL  산출물 종류 (예: model, scaler)
+    artifact_format  TEXT          NOT NULL  저장 형식 (예: joblib, json)
+    artifact_bytes   BYTEA         NOT NULL  바이너리 본체
+    is_active        BOOLEAN                 현재 사용 중 여부 (기본 TRUE)
+    created_at       TIMESTAMPTZ             생성 시각
+    note             TEXT                    비고
+
+  ────────────────────────────────────────
+  model_explain_values
+  모델 단위 SHAP 설명값 (model1/model2/pssr_p75/reserve_power)
+  PK  : id (BIGSERIAL)
+
+    id                BIGSERIAL     NOT NULL  PK
+    model_id          TEXT          NOT NULL  모델 ID
+    version           TEXT          NOT NULL  버전
+    component         TEXT          NOT NULL  컴포넌트 (model1/model2/pssr_p75/reserve_power)
+    explain_type      TEXT          NOT NULL  설명 방식 (예: shap)
+    target_date       DATE                    대상 일자
+    target_datetime   TIMESTAMPTZ             대상 시각
+    split_name        TEXT                    데이터 분할 (train/valid/test)
+    feature_name      TEXT          NOT NULL  피처명
+    feature_value     FLOAT                   피처값
+    effect_value      FLOAT                   SHAP 기여값
+    abs_effect_value  FLOAT                   |기여값|
+    effect_rank       INTEGER                 기여도 순위
+    base_value        FLOAT                   base value
+    created_at        TIMESTAMPTZ             생성 시각
+
+  ────────────────────────────────────────
+  prediction_explain_values
+  예측 단위 SHAP 설명값 (화면 "스코어 근거 패널" = LLM + SHAP 조합용)
+  PK  : id (BIGSERIAL)
+
+    id                    BIGSERIAL   NOT NULL  PK
+    prediction_datetime   TIMESTAMPTZ NOT NULL  predictions.datetime
+    area_name             TEXT        NOT NULL  '육지' | '제주'
+    prediction_model_id   TEXT        NOT NULL  predictions.model_id
+    model_id              TEXT        NOT NULL  설명 대상 컴포넌트 모델
+    model_version         TEXT                  컴포넌트 모델 버전
+    component             TEXT        NOT NULL  컴포넌트 (model1/model2/pssr_p75/reserve_power)
+    explain_type          TEXT        NOT NULL  설명 방식 (예: shap)
+    feature_name          TEXT        NOT NULL  피처명
+    feature_value         FLOAT                 피처값
+    effect_value          FLOAT                 SHAP 기여값
+    abs_effect_value      FLOAT                 |기여값|
+    effect_rank           INTEGER               기여도 순위
+    base_value            FLOAT                 base value
+    created_at            TIMESTAMPTZ           생성 시각
 
 
   ▶ 정적 참조 데이터
