@@ -50,6 +50,20 @@ datasets:
     paginate: false           # 하루치(288행)를 한 번에 반환
     enabled: true
 
+  # 5분단위 전국 전력수급현황 이력
+  # sukub.do 는 웹 폼(REST API 없음) → 수동 CSV 다운로드 후 data/manual/sukub/ 에 배치
+  # 전처리는 stepSUKUB_merge 가 power_supply_today parquet + manual CSV 를 통합 처리
+  - key: sukub_hist
+    name: "5분단위 전국 전력수급현황 이력 (수동 임포트용 더미)"
+    purpose: "SMP예측"
+    path: "https://openapi.kpx.or.kr/sukub.do"
+    mode: daily
+    date_param: startDate
+    end_date_param: endDate
+    date_format: "%Y%m%d"
+    paginate: false
+    enabled: false            # 웹 폼 전용 URL → REST 수집 불가, 수동 CSV 사용
+
   # 발전원별 발전량 현황 (5분단위, openapi.kpx.or.kr 직접 호출, 전체 URL)
   - key: gen_by_source
     name: "발전원별 발전량 현황조회"
@@ -160,7 +174,7 @@ datasets:
     end_date_param: endDt
     date_format: "%Y%m%d"
     area_param: stnIds
-    areas: [108, 133, 143, 159]   # 서울·대전·대구·부산 (전력 수요 주요 권역)
+    areas: [108, 133, 143, 159, 152, 155, 168]   # 서울·대전·대구·부산·울산·창원·여수
     extra_params:
       dataType: json
       dataCd: ASOS
@@ -171,13 +185,3 @@ datasets:
     paginate: true
     enabled: true
 
-  # [구버전·비활성] 직접 KPX 호스트 쓰는 옛 SMP API. 보통 smp_dayahead 로 충분.
-  - key: smp_legacy
-    name: "계통한계가격조회(구버전)"
-    purpose: "SMP예측"
-    path: "https://openapi.kpx.or.kr/openapi/smp1hToday/getSmp1hToday"
-    mode: snapshot
-    area_param: "areaCd"
-    areas: [1, 2]
-    paginate: false
-    enabled: false

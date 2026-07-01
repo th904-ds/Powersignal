@@ -6,3 +6,6 @@ __pycache__/
 .venv/
 *.egg-info/
 reference/
+output/
+eda_output/
+01.preprocessing/archive/*.parquet
