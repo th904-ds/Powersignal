@@ -8,6 +8,7 @@ DB 연결 & upsert 유틸리티.
 """
 from __future__ import annotations
 
+import io
 import os
 import logging
 from pathlib import Path
@@ -90,11 +91,12 @@ def upsert(
     table: str,
     pk_cols: list[str],
     engine: Engine | None = None,
-    batch_size: int = 500,
+    batch_size: int = 50_000,
 ) -> int:
     """
-    DataFrame을 PostgreSQL 테이블에 upsert.
-    PK 충돌 시 나머지 컬럼을 UPDATE.
+    DataFrame을 PostgreSQL 테이블에 upsert (COPY 기반 bulk insert).
+    임시 테이블에 COPY로 적재 후 INSERT ... ON CONFLICT DO UPDATE로 반영한다.
+    행 단위 파라미터 바인딩 INSERT보다 대용량(수만~수십만 행) 테이블에서 훨씬 빠르다.
     반환값: 처리된 총 행 수.
     """
     if df.empty:
@@ -105,31 +107,46 @@ def upsert(
 
     df = rename_for_db(df)
 
-    # DB에 없는 컬럼은 조용히 제거 (스키마 변경 시 안전)
     col_names = list(df.columns)
     non_pk = [c for c in col_names if c not in pk_cols]
 
     if not non_pk:
         raise ValueError(f"pk_cols 외 업데이트할 컬럼이 없습니다: {col_names}")
 
-    cols_sql    = ", ".join(f'"{c}"' for c in col_names)
-    vals_sql    = ", ".join(f":{c}" for c in col_names)
-    pk_sql      = ", ".join(f'"{c}"' for c in pk_cols)
-    updates_sql = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in non_pk)
-
-    sql = text(f"""
-        INSERT INTO {table} ({cols_sql})
-        VALUES ({vals_sql})
-        ON CONFLICT ({pk_sql}) DO UPDATE SET {updates_sql}
-    """)
+    col_sql = ", ".join(f'"{c}"' for c in col_names)
+    pk_sql  = ", ".join(f'"{c}"' for c in pk_cols)
+    upd_sql = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in non_pk)
+    tmp     = f"_tmp_{table}"
 
     total = 0
-    with engine.begin() as conn:
-        for start in range(0, len(df), batch_size):
-            batch = df.iloc[start : start + batch_size]
-            rows = batch.where(batch.notna(), None).to_dict("records")
-            conn.execute(sql, rows)
-            total += len(rows)
+    for start in range(0, len(df), batch_size):
+        raw_chunk = df.iloc[start : start + batch_size]
+        chunk = raw_chunk.where(raw_chunk.notna(), None)
+
+        raw = engine.raw_connection()
+        try:
+            cur = raw.cursor()
+            cur.execute("SET statement_timeout = 0")
+            cur.execute(f'DROP TABLE IF EXISTS "{tmp}"')
+            cur.execute(f'CREATE TEMP TABLE "{tmp}" (LIKE "{table}" INCLUDING DEFAULTS)')
+
+            buf = io.StringIO()
+            chunk.to_csv(buf, index=False, header=False, na_rep="\\N")
+            buf.seek(0)
+            cur.copy_expert(
+                f'COPY "{tmp}" ({col_sql}) FROM STDIN WITH (FORMAT csv, NULL \'\\N\')',
+                buf,
+            )
+
+            cur.execute(
+                f'INSERT INTO "{table}" ({col_sql}) '
+                f'SELECT {col_sql} FROM "{tmp}" '
+                f'ON CONFLICT ({pk_sql}) DO UPDATE SET {upd_sql}'
+            )
+            total += cur.rowcount
+            raw.commit()
+        finally:
+            raw.close()
 
     log.info("upsert %s: %d행 완료", table, total)
     return total
