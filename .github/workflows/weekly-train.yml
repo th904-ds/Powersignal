@@ -36,7 +36,7 @@ jobs:
         run: |
           jupyter nbconvert \
             --to notebook \
-            --execute 02.model/Model_Train_Final.ipynb \
+            --execute 03.Modeling/Model_Train_Final.ipynb \
             --output Model_Train_Final.executed.ipynb \
             --ExecutePreprocessor.timeout=7200
 
