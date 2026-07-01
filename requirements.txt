@@ -1,0 +1,40 @@
+# Core data processing
+pandas
+numpy
+scipy
+scikit-learn
+
+# Modeling and explainability
+lightgbm
+shap
+joblib
+
+# Database and environment variables
+sqlalchemy
+psycopg2-binary
+python-dotenv
+supabase
+
+# API collection and config files
+requests
+PyYAML
+
+# File formats
+pyarrow
+fastparquet
+openpyxl
+
+# Notebook execution in GitHub Actions
+jupyter
+nbconvert
+ipykernel
+
+# Scheduling / utilities
+apscheduler
+tqdm
+python-dateutil
+pytz
+holidays
+
+# Plotting used in model notebooks
+matplotlib

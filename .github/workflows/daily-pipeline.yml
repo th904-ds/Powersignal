@@ -1,0 +1,74 @@
+name: Daily Collect Preprocess Predict
+
+on:
+  schedule:
+    # KST 08:20 = UTC 23:20 (previous day)
+    - cron: "20 23 * * *"
+  workflow_dispatch:
+
+jobs:
+  daily-pipeline:
+    runs-on: ubuntu-latest
+
+    env:
+      PG_URL: ${{ secrets.PG_URL }}
+      DATA_API_KEY: ${{ secrets.DATA_API_KEY }}
+      KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
+      KPX_API_KEY: ${{ secrets.KPX_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Daily collect SMP, generation, and DR data
+        working-directory: ./00.collector
+        run: |
+          python run.py daily --window 3 --datasets smp_dayahead,gen_by_source_hist,smp_decision_count,dr_voluntary,dr_plus,dr_economic,dr_reliability --no-upload
+
+      - name: Daily collect ASOS weather data
+        working-directory: ./00.collector
+        run: |
+          python run.py daily --window 2 --datasets asos_hourly --no-upload
+
+      - name: Collect weather forecast data
+        working-directory: ./00.collector
+        run: |
+          python run_forecast.py
+
+      - name: Run preprocessing filter step
+        working-directory: ./01.preprocessing
+        run: |
+          python run_filter.py
+
+      - name: Run preprocessing and DB upsert step
+        working-directory: ./01.preprocessing
+        run: |
+          python run_preprocess.py
+
+      - name: Run prediction notebook
+        run: |
+          jupyter nbconvert \
+            --to notebook \
+            --execute 03.Modeling/Prediction_Weekly.ipynb \
+            --output Prediction_Weekly.executed.ipynb \
+            --ExecutePreprocessor.timeout=3600
+
+      - name: Upload executed prediction notebook on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prediction-executed-notebook
+          path: 03.Modeling/Prediction_Weekly.executed.ipynb
+          if-no-files-found: ignore
