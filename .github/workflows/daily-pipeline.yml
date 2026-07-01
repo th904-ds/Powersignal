@@ -61,7 +61,7 @@ jobs:
         run: |
           jupyter nbconvert \
             --to notebook \
-            --execute 02.model/Prediction_Weekly.ipynb \
+            --execute 03.Modeling/Prediction_Weekly.ipynb \
             --output Prediction_Weekly.executed.ipynb \
             --ExecutePreprocessor.timeout=3600
 
