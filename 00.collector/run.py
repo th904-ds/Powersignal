@@ -31,6 +31,7 @@ from src.config import load_settings
 
 def _setup_logging():
     from src.config import LOG_DIR
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s | %(message)s",
