@@ -29,6 +29,8 @@ sys.path.insert(0, str(ROOT.parent / "02.database"))
 from src.config import LOG_DIR
 from src.forecast_collector import ForecastCollector
 
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s | %(message)s",
