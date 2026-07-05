@@ -20,7 +20,8 @@ import numpy as np
 from pathlib import Path
 
 # ── 경로 ──────────────────────────────────────────────────────────────
-_PROJECT = Path("c:/Users/김태희/Desktop/프로젝트/3-1. [공모전] 산업통상부/Powersignal")
+# GitHub Actions/Render/로컬에서 모두 동작하도록 현재 파일 위치 기준으로 프로젝트 루트를 계산한다.
+_PROJECT = Path(__file__).resolve().parents[2]
 FEAT      = _PROJECT / "00.collector" / "data" / "features"
 MANUAL    = _PROJECT / "00.collector" / "data" / "manual"
 OUT       = _PROJECT / "01.preprocessing" / "output"
@@ -28,7 +29,7 @@ OUT       = _PROJECT / "01.preprocessing" / "output"
 _SUKUB_TODAY_DIR  = _PROJECT / "00.collector" / "data" / "processed" / "power_supply_today"
 # sukub 5분 데이터 소스 ②: sukub.do 에서 수동 다운로드한 CSV 파일 모음
 _SUKUB_MANUAL_DIR = MANUAL / "sukub"
-OUT.mkdir(exist_ok=True)
+OUT.mkdir(parents=True, exist_ok=True)
 
 TRAIN_START = "2023-01-01"
 TRAIN_END   = "2025-12-31 23:59"
