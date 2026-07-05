@@ -12,9 +12,8 @@ jobs:
 
     env:
       PG_URL: ${{ secrets.PG_URL }}
-      DATA_API_KEY: ${{ secrets.DATA_API_KEY }}
-      KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
-      KPX_API_KEY: ${{ secrets.KPX_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      KPX_SERVICE_KEY: ${{ secrets.KPX_SERVICE_KEY }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
