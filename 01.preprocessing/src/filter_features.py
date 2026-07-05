@@ -189,6 +189,18 @@ _SUPPLY_CSV = PROC / "power_supply_today" / "HOME_전력수급_전력수급실�
 
 
 def load_power_supply_hist() -> pd.DataFrame:
+    if not _SUPPLY_CSV.exists():
+        print(f"  [전력수급실적] 경고: {_SUPPLY_CSV} 없음 — 수동 일별 전력수급실적 스킵")
+        return pd.DataFrame(columns=[
+            "date",
+            "facility_capacity",
+            "supply_capacity",
+            "daily_max_demand",
+            "supply_reserve_power",
+            "supply_reserve_rate",
+            "reserve_to_max_demand",
+        ])
+
     df = pd.read_csv(_SUPPLY_CSV, encoding="cp949")
     df["date"] = pd.to_datetime(
         df[["년", "월", "일"]].rename(columns={"년": "year", "월": "month", "일": "day"})
@@ -272,7 +284,9 @@ def build_base() -> pd.DataFrame:
     base = base.merge(smp_dec.rename(columns={"date": "_date"}), on="_date", how="left")
 
     # 전력수급실적: 일별 → 시간별 (당일 모든 시간에 동일값)
-    base = base.merge(supply.rename(columns={"date": "_date"}), on="_date", how="left")
+    # 수동 CSV가 없는 GitHub Actions 환경에서는 빈 DF가 반환되므로 merge를 건너뛴다.
+    if not supply.empty:
+        base = base.merge(supply.rename(columns={"date": "_date"}), on="_date", how="left")
 
     base = base.drop(columns=["_date"])
 
