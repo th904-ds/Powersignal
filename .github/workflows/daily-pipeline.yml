@@ -12,9 +12,8 @@ jobs:
 
     env:
       PG_URL: ${{ secrets.PG_URL }}
-      DATA_API_KEY: ${{ secrets.DATA_API_KEY }}
-      KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
-      KPX_API_KEY: ${{ secrets.KPX_API_KEY }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      KPX_SERVICE_KEY: ${{ secrets.KPX_SERVICE_KEY }}
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
@@ -32,10 +31,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Daily collect SMP, generation, and DR data
+      - name: Prepare runtime directories
+        run: |
+          mkdir -p 00.collector/logs
+          mkdir -p 00.collector/data/raw
+          mkdir -p 00.collector/data/processed
+          mkdir -p 00.collector/data/features
+          mkdir -p 01.preprocessing/output
+          mkdir -p 03.Modeling/outputs
+
+      - name: Daily collect SMP, generation, fuel, supply, and DR data
         working-directory: ./00.collector
         run: |
-          python run.py daily --window 3 --datasets smp_dayahead,gen_by_source_hist,smp_decision_count,dr_voluntary,dr_plus,dr_economic,dr_reliability --no-upload
+          python run.py daily --window 3 --datasets smp_dayahead,gen_by_source_hist,monthly_fuel_cost,smp_decision_count,power_supply_today,dr_voluntary,dr_plus,dr_economic,dr_reliability --no-upload
 
       - name: Daily collect ASOS weather data
         working-directory: ./00.collector
