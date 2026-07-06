@@ -32,7 +32,7 @@ _SUKUB_MANUAL_DIR = MANUAL / "sukub"
 OUT.mkdir(parents=True, exist_ok=True)
 
 TRAIN_START = "2023-01-01"
-TRAIN_END   = "2025-12-31 23:59"
+TRAIN_END   = None
 
 # ── 상수 ──────────────────────────────────────────────────────────────
 WEATHER_COLS       = ["temp_c", "humidity_pct", "wind_speed_ms", "dew_point_c"]
@@ -574,16 +574,18 @@ def step7_smp_lags(df: pd.DataFrame) -> pd.DataFrame:
 # STEP 8 — 훈련 기간 필터 & 저장
 # ══════════════════════════════════════════════════════════════════════
 def step8_filter_save(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    train = df[(df["datetime"] >= TRAIN_START) &
-               (df["datetime"] <= TRAIN_END)].copy()
-    print(f"[Step 8] 훈련 기간 필터: {len(train):,}행  "
+    if TRAIN_END is None:
+        train = df[df["datetime"] >= TRAIN_START].copy()
+    else:
+        train = df[(df["datetime"] >= TRAIN_START) &
+                   (df["datetime"] <= TRAIN_END)].copy()
+
+    print(f"[Step 8] model_features 기간 필터: {len(train):,}행  "
           f"({train['datetime'].min()} ~ {train['datetime'].max()})")
 
-    # Model 1 컬럼: 전체
-    m1_drop = ["date_key", "month_key"]   # 문자열 키, 모델 입력 불필요
+    m1_drop = ["date_key", "month_key"]
     m1 = train.drop(columns=[c for c in m1_drop if c in train.columns])
 
-    # Model 2 컬럼: SMP 자기회귀 제외
     smp_ar_cols = (
         [f"smp_lag{l}" for l in SMP_LAG_HOURS] +
         [f"smp_roll_{s}_{w}" for s in ["mean","std","max","min"] for w in SMP_ROLL_WINS]
@@ -595,20 +597,5 @@ def step8_filter_save(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     print(f"[Step 8] Model 1: {m1.shape}  →  output/model1_train.parquet")
     print(f"[Step 8] Model 2: {m2.shape}  →  output/model2_train.parquet")
-
-    # 최종 결측 검증
-    m1_miss = m1.isnull().sum()
-    m1_miss = m1_miss[m1_miss > 0]
-    if len(m1_miss):
-        print(f"\n  [경고] Model 1 잔여 결측:\n{m1_miss.to_string()}")
-    else:
-        print("\n  [확인] Model 1 결측 0")
-
-    m2_miss = m2.isnull().sum()
-    m2_miss = m2_miss[m2_miss > 0]
-    if len(m2_miss):
-        print(f"  [경고] Model 2 잔여 결측:\n{m2_miss.to_string()}")
-    else:
-        print("  [확인] Model 2 결측 0")
 
     return m1, m2
