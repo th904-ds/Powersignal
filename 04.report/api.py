@@ -30,10 +30,13 @@ app = FastAPI(title="Powersignal AI Report API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://b759b329-69f8-4634-9e8b-feaf697799b2.lovableproject.com",
+        "https://getpowersignal.lovable.app",
+        "https://www.getpowersignal.space",
+        "https://getpowersignal.space",
+        "http://localhost:8080",
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://getpowersignal.space", #여기에 도메인 주소 넣어야함!!!!
-        "https://www.getpowersignal.space",
     ],
     allow_credentials=True,
     allow_methods=["*"],
