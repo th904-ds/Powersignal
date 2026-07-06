@@ -22,9 +22,29 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-PROC = Path(__file__).parents[2] / "00.collector" / "data" / "processed"
-OUT = Path(__file__).parents[2] / "00.collector" / "data" / "features"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROC = PROJECT_ROOT / "00.collector" / "data" / "processed"
+OUT = PROJECT_ROOT / "00.collector" / "data" / "features"
 OUT.mkdir(parents=True, exist_ok=True)
+
+
+def _query_db(sql: str) -> pd.DataFrame:
+    """GitHub Actions의 fresh runner에서 로컬 parquet이 없을 때 Supabase DB에서 fallback 로드."""
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "02.database"))
+        from db import get_engine  # type: ignore
+        from sqlalchemy import text
+
+        engine = get_engine()
+        with engine.connect() as conn:
+            return pd.read_sql(text(sql), conn)
+    except Exception as e:
+        raise FileNotFoundError(f"로컬 parquet도 없고 DB fallback도 실패했습니다: {e}") from e
+
+
+def _to_kst_naive(series: pd.Series) -> pd.Series:
+    dt = pd.to_datetime(series, errors="coerce", utc=True)
+    return dt.dt.tz_convert("Asia/Seoul").dt.tz_localize(None)
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +112,40 @@ _FUEL_RENAME = {
 
 
 def load_gen() -> pd.DataFrame:
-    df = _load_all_parquets(PROC / "gen_by_source_hist")
+    folder = PROC / "gen_by_source_hist"
+    try:
+        df = _load_all_parquets(folder)
+    except FileNotFoundError:
+        print(f"  [gen_by_source_hist] 로컬 parquet 없음 → DB fallback 로드: {folder}")
+        result = _query_db("""
+            SELECT
+                datetime,
+                gen_nuclear AS "gen_원자력",
+                gen_lng AS "gen_LNG",
+                gen_bituminous AS "gen_유연탄",
+                gen_anthracite AS "gen_무연탄",
+                gen_renewable AS "gen_신재생·기타",
+                gen_hydro AS "gen_수력",
+                gen_pumped AS "gen_양수",
+                gen_oil AS "gen_유전",
+                gen_total,
+                gen_nuclear_ratio AS "gen_원자력_ratio",
+                gen_lng_ratio AS "gen_LNG_ratio",
+                gen_bituminous_ratio AS "gen_유연탄_ratio",
+                gen_anthracite_ratio AS "gen_무연탄_ratio",
+                gen_renewable_ratio AS "gen_신재생·기타_ratio",
+                gen_hydro_ratio AS "gen_수력_ratio",
+                gen_pumped_ratio AS "gen_양수_ratio",
+                gen_oil_ratio AS "gen_유전_ratio"
+            FROM gen_by_source_hist
+            ORDER BY datetime
+        """)
+        result["datetime"] = _to_kst_naive(result["datetime"])
+        result = result.dropna(subset=["datetime"]).drop_duplicates("datetime").sort_values("datetime").reset_index(drop=True)
+        print(f"  [gen_by_source_hist:DB] {len(result):,}행  "
+              f"{result['datetime'].min()} ~ {result['datetime'].max()}")
+        return result
+
     # tradeNo = 거래 시간 (01~24), tradeYmd = YYYYMMDD
     df["datetime"] = _date_hour_to_datetime(df["tradeYmd"], df["tradeNo"])
     df["amgo"] = pd.to_numeric(df["amgo"], errors="coerce")
