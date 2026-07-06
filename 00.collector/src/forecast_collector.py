@@ -60,32 +60,56 @@ _CAT_KEEP = {"TMP", "REH", "WSD", "POP", "SKY"}
 
 
 class ForecastCollector:
-    def __init__(self, service_key: str, interval_sec: float = 0.5):
+    def __init__(self, service_key: str, interval_sec: float = 0.5,
+                 timeout: tuple[float, float] = (10, 60), max_retries: int = 3):
         self.service_key = service_key
         self.interval_sec = interval_sec
+        self.timeout = timeout
+        self.max_retries = max_retries
         self.session = requests.Session()
         self.session.headers["Accept"] = "application/json"
 
     # ── 공통 HTTP ────────────────────────────────────────────────────────────
     def _get(self, url: str, extra: dict) -> dict:
-        r = self.session.get(
-            url,
-            params={"serviceKey": self.service_key, "dataType": "json",
-                    "numOfRows": 9999, **extra},
-            timeout=20,
-        )
-        r.raise_for_status()
-        time.sleep(self.interval_sec)
+        """공공데이터 API 호출. 일시적 지연/네트워크 오류는 재시도한다."""
+        last_error: Exception | None = None
+        endpoint = url.split("/")[-1]
 
-        body   = r.json().get("response", r.json())
-        header = body.get("header", {})
-        code   = str(header.get("resultCode", ""))
-        msg    = header.get("resultMsg", "")
-        if code not in {"00", "0"}:
-            if any(k in msg.upper() for k in ("NODATA", "NO_DATA")):
-                return {}
-            raise RuntimeError(f"API {url.split('/')[-1]} 오류 {code}: {msg}")
-        return body.get("body", {})
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                r = self.session.get(
+                    url,
+                    params={"serviceKey": self.service_key, "dataType": "json",
+                            "numOfRows": 9999, **extra},
+                    timeout=self.timeout,
+                )
+                r.raise_for_status()
+                time.sleep(self.interval_sec)
+
+                payload = r.json()
+                body   = payload.get("response", payload)
+                header = body.get("header", {})
+                code   = str(header.get("resultCode", ""))
+                msg    = header.get("resultMsg", "")
+                if code not in {"00", "0"}:
+                    if any(k in msg.upper() for k in ("NODATA", "NO_DATA")):
+                        return {}
+                    raise RuntimeError(f"API {endpoint} 오류 {code}: {msg}")
+                return body.get("body", {})
+
+            except RuntimeError:
+                # 인증키 오류 등 API가 명시적으로 반환한 오류는 재시도해도 해결되지 않는 경우가 많다.
+                raise
+            except (requests.exceptions.RequestException, ValueError) as e:
+                last_error = e
+                if attempt >= self.max_retries:
+                    break
+                wait = min(2 ** attempt, 10)
+                log.warning("%s 호출 실패(%d/%d): %s — %d초 후 재시도",
+                            endpoint, attempt, self.max_retries, e, wait)
+                time.sleep(wait)
+
+        raise last_error if last_error is not None else RuntimeError(f"API {endpoint} 호출 실패")
 
     def _items(self, body: dict) -> list[dict]:
         it = body.get("items") or {}
@@ -115,12 +139,17 @@ class ForecastCollector:
         log.info("단기예보 base=%s %s (7개 관측소)", base_date, base_time)
         rows: list[dict] = []
         for stn_id, info in STATIONS.items():
-            body = self._get(SHORT_URL, {
-                "base_date": base_date,
-                "base_time": base_time,
-                "nx": info["nx"],
-                "ny": info["ny"],
-            })
+            try:
+                body = self._get(SHORT_URL, {
+                    "base_date": base_date,
+                    "base_time": base_time,
+                    "nx": info["nx"],
+                    "ny": info["ny"],
+                })
+            except (requests.exceptions.RequestException, ValueError) as e:
+                log.warning("단기예보 수집 실패: stn_id=%s name=%s error=%s",
+                            stn_id, info.get("name"), e)
+                continue
             rows.extend(self._parse_vilagefcst(self._items(body), stn_id, issued_at))
 
         return pd.DataFrame(rows) if rows else pd.DataFrame()
@@ -177,13 +206,21 @@ class ForecastCollector:
         land_cache: dict[str, dict] = {}
         for info in STATIONS.values():
             if info["mid_ta"] not in ta_cache:
-                body = self._get(MID_TA_URL, {"regId": info["mid_ta"], "tmFc": tmFc})
-                items = self._items(body)
-                ta_cache[info["mid_ta"]] = items[0] if items else {}
+                try:
+                    body = self._get(MID_TA_URL, {"regId": info["mid_ta"], "tmFc": tmFc})
+                    items = self._items(body)
+                    ta_cache[info["mid_ta"]] = items[0] if items else {}
+                except (requests.exceptions.RequestException, ValueError) as e:
+                    log.warning("중기 기온예보 수집 실패: regId=%s error=%s", info["mid_ta"], e)
+                    ta_cache[info["mid_ta"]] = {}
             if info["mid_land"] not in land_cache:
-                body = self._get(MID_LAND_URL, {"regId": info["mid_land"], "tmFc": tmFc})
-                items = self._items(body)
-                land_cache[info["mid_land"]] = items[0] if items else {}
+                try:
+                    body = self._get(MID_LAND_URL, {"regId": info["mid_land"], "tmFc": tmFc})
+                    items = self._items(body)
+                    land_cache[info["mid_land"]] = items[0] if items else {}
+                except (requests.exceptions.RequestException, ValueError) as e:
+                    log.warning("중기 육상예보 수집 실패: regId=%s error=%s", info["mid_land"], e)
+                    land_cache[info["mid_land"]] = {}
 
         rows: list[dict] = []
         for stn_id, info in STATIONS.items():
