@@ -264,6 +264,25 @@ class ForecastCollector:
 
         df["datetime"]  = pd.to_datetime(df["datetime"],  utc=True)
         df["issued_at"] = pd.to_datetime(df["issued_at"], utc=True)
+
+        # DB primary key is (datetime, stn_id). Short-range forecast and
+        # medium-range forecast can overlap around D+3 09:00/15:00.
+        # PostgreSQL ON CONFLICT cannot update the same target row twice
+        # within one INSERT statement, so keep exactly one row per key.
+        # Prefer short forecast because it is hourly and more granular.
+        forecast_priority = {"short": 0, "mid_am": 1, "mid_pm": 1}
+        df["_forecast_priority"] = df["forecast_type"].map(forecast_priority).fillna(9)
+        before = len(df)
+        df = (
+            df.sort_values(["datetime", "stn_id", "_forecast_priority", "issued_at"])
+              .drop_duplicates(subset=["datetime", "stn_id"], keep="first")
+              .drop(columns=["_forecast_priority"])
+              .reset_index(drop=True)
+        )
+        removed = before - len(df)
+        if removed:
+            log.info("중복 예보 행 제거: %d행 ((datetime, stn_id) 기준, short 우선)", removed)
+
         return df.sort_values(["datetime", "stn_id"]).reset_index(drop=True)
 
 
